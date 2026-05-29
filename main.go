@@ -3,23 +3,19 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
+	"eman1can/acb"
 	"eman1can/awb"
-	"eman1can/br"
+	"eman1can/wav"
 )
 
 func main() {
-	data, err := os.ReadFile("filename.txt")
+	data, err := os.ReadFile("rrilgl")
 	if err != nil {
 		fmt.Println("Error reading file:", err)
 		return
 	}
-
-	// AWB Keycode for Love Live! School Idol Festival 2 MIRACLE LIVE (Android)
-	// keycode := uint64(5067530812966687744)
-
-	// AWB Keycode for Love Live! School idol festival ALL STARS (Android)
-	keycode := uint64(5067530812966687744)
 
 	awbOffset := 13120
 	awbSize := 133153
@@ -28,9 +24,60 @@ func main() {
 
 	acbData := make([]byte, acbSize)
 	awbData := make([]byte, awbSize)
-	copy(acbData[acbOffset:], data)
-	copy(awbData[awbOffset:], data)
+	copy(acbData, data[acbOffset:acbOffset+acbSize])
+	copy(awbData, data[awbOffset:awbOffset+awbSize])
 
-	sf := br.InitBitReader(awbData)
-	awb := awb.LoadAWB(sf, keycode)
+	err = os.WriteFile("rrilgl.acb", acbData, 0666)
+	if err != nil {
+		fmt.Println("Error writing file:", err)
+		return
+	}
+	err = os.WriteFile("rrilgl.awb", awbData, 0666)
+	if err != nil {
+		fmt.Println("Error writing file:", err)
+		return
+	}
+
+	// AWB Keycode for Love Live! School idol festival ALL STARS (Android)
+	keycode := uint64(6498535309877346413)
+
+	acbFile, err := acb.LoadACB(acbData)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error loading ACB:", err)
+		os.Exit(1)
+	}
+
+	awbFile := awb.LoadAWB(awbData, keycode)
+
+	for waveID, hcaFile := range awbFile.Subfiles {
+		name, ok := acbFile.Names[uint16(waveID)]
+		if !ok || name == "" {
+			name = fmt.Sprintf("wave_%d", waveID)
+		}
+
+		// Sanitize filename
+		name = strings.Map(func(r rune) rune {
+			if strings.ContainsRune(`\/:*?"<>|`, r) {
+				return '_'
+			}
+			return r
+		}, name)
+
+		outName := name + ".wav"
+
+		f, err := os.Create(outName)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error creating %s: %v\n", outName, err)
+			continue
+		}
+
+		if err := wav.WriteWAV(hcaFile, f); err != nil {
+			fmt.Fprintf(os.Stderr, "error writing %s: %v\n", outName, err)
+			f.Close()
+			continue
+		}
+
+		f.Close()
+		fmt.Printf("wrote %s\n", outName)
+	}
 }

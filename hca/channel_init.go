@@ -75,6 +75,20 @@ func ChannelInit(channels uint, channelConfig uint, trackCount uint, baseBandCou
 		} else {
 			channel[ix].CodedCount = baseBandCount
 		}
+
+		channel[ix].Intensity = make([]byte, SubFrames)
+		channel[ix].ScaleFactors = make([]byte, SamplesPerSubframe)
+		channel[ix].Resolution = make([]byte, SamplesPerSubframe)
+		channel[ix].Noises = make([]byte, SamplesPerSubframe)
+		channel[ix].Gain = make([]float32, SamplesPerSubframe)
+		channel[ix].Temp = make([]float32, SamplesPerSubframe)
+		channel[ix].ImdctPrevious = make([]float32, SamplesPerSubframe)
+		channel[ix].Spectra = make([][]float32, SubFrames)
+		channel[ix].Wave = make([][]float32, SubFrames)
+		for s := uint(0); s < SubFrames; s++ {
+			channel[ix].Spectra[s] = make([]float32, SamplesPerSubframe)
+			channel[ix].Wave[s] = make([]float32, SamplesPerSubframe)
+		}
 	}
 
 	return channel

@@ -51,10 +51,10 @@ var (
 
 	defaultRandom = uint(1)
 
-	subFrames          = uint(8)
-	samplesPerSubframe = uint(128)
-	samplesPerFrame    = subFrames * samplesPerSubframe
-	mdctBits           = uint(7)
+	SubFrames          = uint(8)
+	SamplesPerSubframe = uint(128)
+	SamplesPerFrame    = SubFrames * SamplesPerSubframe
+	MdctBits           = uint(7)
 )
 
 type StChannel struct {
@@ -65,8 +65,8 @@ type StChannel struct {
 	ScaleFactors []byte
 	Resolution   []byte
 	Noises       []byte
-	NoiseCount   []byte
-	ValidCount   []byte
+	NoiseCount   uint
+	ValidCount   uint
 
 	Gain    []float32
 	Spectra [][]float32
@@ -130,14 +130,16 @@ type File struct {
 	LoopStartSample uint
 	LoopEndSample   uint
 
-	Buffer     []byte
-	FileBuffer []byte
+	// Samples holds the fully decoded PCM data: Samples[channel][sampleIndex].
+	// Populated by LoadHCA after all frames are decoded.
+	Samples [][]float32
 }
 
-func crc16Checksum(sf *br.BitReader, size uint) bool {
+// Calculates a CRC-16 Checksum over the given data
+func checksum(data []byte) bool {
 	crc := uint(0)
-	for ix := uint(0); ix < size; ix++ {
-		crc = (crc << 8) ^ crcMaskTable[(crc>>8)^uint(sf.Data[ix])]
+	for ix := uint(0); ix < uint(len(data)); ix++ {
+		crc = ((crc << 8) ^ crcMaskTable[(crc>>8)^uint(data[ix])]) & 0xFFFF
 	}
 	return crc != 0
 }
@@ -167,8 +169,9 @@ func headerCeil2(a uint, b uint) uint {
 	return a/b + (a % b)
 }
 
-func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint64) *File {
-	br.Seek(sf, offset)
+func LoadHCA(data []byte, keycode uint64) *File {
+	size := uint(len(data))
+	sf := br.InitBitReader(data)
 
 	if peekMagic(sf) != headerMagic {
 		log.Panic("Invalid HCA header")
@@ -177,17 +180,17 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 
 	file := File{}
 
-	file.Version = br.ReadA(sf, 16)
-	if file.Version != 2 {
+	file.Version = br.ReadABE(sf, 16)
+	if file.Version != 0x0200 && file.Version != 0x0300 {
 		log.Panicln("Invalid HCA Version")
 	}
 
-	file.HeaderSize = br.ReadA(sf, 16)
+	file.HeaderSize = br.ReadABE(sf, 16)
 	if size < file.HeaderSize {
 		log.Panicln("Subfile size smaller than header size")
 	}
 
-	if crc16Checksum(sf, file.HeaderSize) {
+	if checksum(data[:file.HeaderSize]) {
 		log.Panicln("Invalid HCA header CRC")
 	}
 
@@ -196,11 +199,11 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 	if size >= 0x10 && peekMagic(sf) == fmtHeaderMagic {
 		br.Skip(sf, 32)
 
-		file.ChannelCount = br.ReadA(sf, 8)
-		file.SampleRate = br.ReadA(sf, 24)
-		file.FrameCount = br.ReadA(sf, 32)
-		file.EncoderDelay = br.ReadA(sf, 16)
-		file.EncoderPadding = br.ReadA(sf, 16)
+		file.ChannelCount = br.ReadABE(sf, 8)
+		file.SampleRate = br.ReadABE(sf, 24)
+		file.FrameCount = br.ReadABE(sf, 32)
+		file.EncoderDelay = br.ReadABE(sf, 16)
+		file.EncoderPadding = br.ReadABE(sf, 16)
 
 		if file.ChannelCount < minChannels || file.ChannelCount > maxChannels {
 			log.Panicln("Invalid channels")
@@ -222,16 +225,16 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 	if size >= 0x10 && peekMagic(sf) == compHeaderMagic {
 		br.Skip(sf, 32)
 
-		file.FrameSize = br.ReadA(sf, 16)
-		file.MinResolution = br.ReadA(sf, 8)
-		file.MaxResolution = br.ReadA(sf, 8)
-		file.TrackCount = br.ReadA(sf, 8)
-		file.ChannelConfig = br.ReadA(sf, 8)
-		file.TotalBandCount = br.ReadA(sf, 8)
-		file.BaseBandCount = br.ReadA(sf, 8)
-		file.StereoBandCount = br.ReadA(sf, 8)
-		file.BandsPerHfrGroup = br.ReadA(sf, 8)
-		file.MsStereo = br.ReadA(sf, 8)
+		file.FrameSize = br.ReadABE(sf, 16)
+		file.MinResolution = br.ReadABE(sf, 8)
+		file.MaxResolution = br.ReadABE(sf, 8)
+		file.TrackCount = br.ReadABE(sf, 8)
+		file.ChannelConfig = br.ReadABE(sf, 8)
+		file.TotalBandCount = br.ReadABE(sf, 8)
+		file.BaseBandCount = br.ReadABE(sf, 8)
+		file.StereoBandCount = br.ReadABE(sf, 8)
+		file.BandsPerHfrGroup = br.ReadABE(sf, 8)
+		file.MsStereo = br.ReadABE(sf, 8)
 
 		br.Skip(sf, 8)
 
@@ -239,14 +242,14 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 	} else if size >= 0x0C && peekMagic(sf) == decHeaderMagic {
 		br.Skip(sf, 32)
 
-		file.FrameSize = br.ReadA(sf, 16)
-		file.MinResolution = br.ReadA(sf, 8)
-		file.MaxResolution = br.ReadA(sf, 8)
-		file.TotalBandCount = br.ReadA(sf, 8) + 1
-		file.BaseBandCount = br.ReadA(sf, 8) + 1
+		file.FrameSize = br.ReadABE(sf, 16)
+		file.MinResolution = br.ReadABE(sf, 8)
+		file.MaxResolution = br.ReadABE(sf, 8)
+		file.TotalBandCount = br.ReadABE(sf, 8) + 1
+		file.BaseBandCount = br.ReadABE(sf, 8) + 1
 		file.TrackCount = br.Read(sf, 4)
 		file.ChannelConfig = br.Read(sf, 4)
-		file.StereoType = br.ReadA(sf, 8)
+		file.StereoType = br.ReadABE(sf, 8)
 
 		if file.StereoType == enum.Discrete {
 			file.BaseBandCount = file.TotalBandCount
@@ -263,8 +266,8 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 	if size >= 0x08 && peekMagic(sf) == vbrHeaderMagic {
 		br.Skip(sf, 32)
 
-		file.VbrMaxFrameSize = br.ReadA(sf, 16)
-		file.VbrNoiseLevel = br.ReadA(sf, 16)
+		file.VbrMaxFrameSize = br.ReadABE(sf, 16)
+		file.VbrNoiseLevel = br.ReadABE(sf, 16)
 
 		if file.FrameSize > 0 || file.VbrMaxFrameSize <= 8 || file.VbrMaxFrameSize > 0x1FF {
 			log.Panicln("Invalid VBR max frame size")
@@ -278,7 +281,7 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 
 	if size >= 0x06 && peekMagic(sf) == athHeaderMagic {
 		br.Skip(sf, 32)
-		file.AthType = br.ReadA(sf, 16)
+		file.AthType = br.ReadABE(sf, 16)
 
 		size -= 0x06
 	} else if file.Version < 2 {
@@ -290,10 +293,10 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 	if size >= 0x10 && peekMagic(sf) == loopHeaderMagic {
 		br.Skip(sf, 32)
 
-		file.LoopStartFrame = br.ReadA(sf, 32)
-		file.LoopEndFrame = br.ReadA(sf, 32)
-		file.LoopStartDelay = br.ReadA(sf, 16)
-		file.LoopEndPadding = br.ReadA(sf, 16)
+		file.LoopStartFrame = br.ReadABE(sf, 32)
+		file.LoopEndFrame = br.ReadABE(sf, 32)
+		file.LoopStartDelay = br.ReadABE(sf, 16)
+		file.LoopEndPadding = br.ReadABE(sf, 16)
 
 		file.LoopEnabled = 1
 
@@ -314,7 +317,7 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 	if size >= 0x06 && peekMagic(sf) == ciphHeaderMagic {
 		br.Skip(sf, 32)
 
-		file.CiphType = br.ReadA(sf, 16)
+		file.CiphType = br.ReadABE(sf, 16)
 
 		if file.CiphType != 0 && file.CiphType != 1 && file.CiphType != 56 {
 			log.Panicln("Invalid ciph type")
@@ -330,7 +333,7 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 	if size >= 0x08 && peekMagic(sf) == rvaHeaderMagic {
 		br.Skip(sf, 32)
 
-		file.RvaVolume = math.Float32frombits(uint32(br.ReadA(sf, 32)))
+		file.RvaVolume = math.Float32frombits(uint32(br.ReadABE(sf, 32)))
 
 		size -= 0x08
 	} else {
@@ -340,7 +343,7 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 	if size >= 0x05 && peekMagic(sf) == commHeaderMagic {
 		br.Skip(sf, 32)
 
-		file.CommentLen = br.ReadA(sf, 8)
+		file.CommentLen = br.ReadABE(sf, 8)
 
 		if file.CommentLen > size-8 {
 			log.Panicln("Invalid comment length")
@@ -348,7 +351,7 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 
 		var str []byte
 		for i := 0; i < int(file.CommentLen); i++ {
-			b := br.ReadA(sf, 8)
+			b := br.ReadABE(sf, 8)
 			str = append(str, byte(b))
 		}
 		file.Comment = string(str)
@@ -382,7 +385,7 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 		log.Panicln("Invalid track count")
 	}
 
-	if file.TotalBandCount > samplesPerSubframe || file.BaseBandCount > samplesPerSubframe || file.StereoBandCount > samplesPerSubframe || file.BaseBandCount+file.StereoBandCount > samplesPerSubframe || file.BandsPerHfrGroup > samplesPerSubframe {
+	if file.TotalBandCount > SamplesPerSubframe || file.BaseBandCount > SamplesPerSubframe || file.StereoBandCount > SamplesPerSubframe || file.BaseBandCount+file.StereoBandCount > SamplesPerSubframe || file.BandsPerHfrGroup > SamplesPerSubframe {
 		log.Panicln("Invalid frame counts")
 	}
 
@@ -394,16 +397,48 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 
 	file.Random = defaultRandom
 
-	if file.MsStereo == 1 {
-		log.Panicln("We don't know how to handle stereo")
+	file.SampleCount = file.FrameCount*SamplesPerFrame - file.EncoderDelay - file.EncoderPadding
+	file.LoopStartSample = file.LoopStartFrame*SamplesPerFrame - file.EncoderDelay + file.LoopStartDelay
+	file.LoopEndSample = file.LoopEndFrame*SamplesPerFrame - file.EncoderDelay + (SamplesPerFrame - file.LoopEndPadding)
+
+	// Allocate decoded sample storage: one slice per channel.
+	file.Samples = make([][]float32, file.ChannelCount)
+	for ch := uint(0); ch < file.ChannelCount; ch++ {
+		file.Samples[ch] = make([]float32, file.SampleCount)
 	}
 
-	file.SampleCount = file.FrameCount*samplesPerFrame - file.EncoderDelay - file.EncoderPadding
-	file.LoopStartSample = file.LoopStartFrame*samplesPerFrame - file.EncoderDelay + file.LoopStartDelay
-	file.LoopEndSample = file.LoopEndFrame*samplesPerFrame - file.EncoderDelay + (samplesPerFrame - file.LoopEndPadding)
+	frameBuffer := make([]byte, file.FrameSize)
+	sampleIdx := uint(0)
 
-	file.Buffer = make([]byte, file.FrameSize)
-	file.FileBuffer = make([]byte, 4*file.ChannelCount*samplesPerFrame)
+frameLoop:
+	for frame := uint(0); frame < file.FrameCount; frame++ {
+		frameOffset := file.HeaderSize + frame*file.FrameSize
+		if uint(len(data)) < frameOffset+file.FrameSize {
+			log.Panicln("HCA data truncated at frame", frame)
+		}
+		copy(frameBuffer, sf.Data[frameOffset:frameOffset+file.FrameSize])
+
+		if !DecodeFrame(&file, frameBuffer) {
+			// Skip bad frames; leave corresponding output samples as zero.
+			continue
+		}
+
+		for subframe := uint(0); subframe < SubFrames; subframe++ {
+			for sample := uint(0); sample < SamplesPerSubframe; sample++ {
+				absIdx := frame*SamplesPerFrame + subframe*SamplesPerSubframe + sample
+				if absIdx < file.EncoderDelay {
+					continue
+				}
+				if absIdx >= file.EncoderDelay+file.SampleCount {
+					break frameLoop
+				}
+				for ch := uint(0); ch < file.ChannelCount; ch++ {
+					file.Samples[ch][sampleIdx] = file.Channel[ch].Wave[subframe][sample]
+				}
+				sampleIdx++
+			}
+		}
+	}
 
 	return &file
 }

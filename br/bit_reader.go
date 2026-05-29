@@ -34,6 +34,32 @@ func Seek(sf *BitReader, offset uint) {
 	sf.Aligned = sf.Bit%8 == 0
 }
 
+func ReadABE(sf *BitReader, size uint) uint {
+	if !sf.Aligned {
+		log.Panicln("readABE called on unaligned BitReader")
+	}
+
+	pos := sf.Bit / 8
+
+	v := uint(0)
+	switch size {
+	case 8:
+		v = uint(sf.Data[pos])
+	case 16:
+		v = uint(binary.BigEndian.Uint16(sf.Data[pos : pos+2]))
+	case 24:
+		v = uint(sf.Data[pos])<<16 | uint(sf.Data[pos+1])<<8 | uint(sf.Data[pos+2])
+	case 32:
+		v = uint(binary.BigEndian.Uint32(sf.Data[pos : pos+4]))
+	default:
+		log.Panicln("readABE called on invalid size")
+	}
+
+	sf.Bit += size
+
+	return v
+}
+
 func ReadA(sf *BitReader, size uint) uint {
 	if !sf.Aligned {
 		log.Panicln("readA called on unaligned BitReader")
@@ -60,7 +86,7 @@ func ReadA(sf *BitReader, size uint) uint {
 	return v
 }
 
-func peek(sf *BitReader, size uint) uint {
+func Peek(sf *BitReader, size uint) uint {
 	if size == 0 {
 		return 0
 	}
@@ -117,8 +143,17 @@ func peek(sf *BitReader, size uint) uint {
 }
 
 func Read(sf *BitReader, size uint) uint {
-	v := peek(sf, size)
+	v := Peek(sf, size)
 	sf.Bit += size
 	sf.Aligned = sf.Bit%8 == 0
 	return v
+}
+
+func Back(sf *BitReader, size uint) {
+	if sf.Bit < size {
+		sf.Bit = 0
+	} else {
+		sf.Bit -= size
+	}
+	sf.Aligned = sf.Bit%8 == 0
 }

@@ -1,14 +1,16 @@
 package awb
 
 import (
+	"fmt"
 	"log"
+	"os"
 
 	"eman1can/br"
 	"eman1can/hca"
 )
 
 var (
-	AwbHeaderMagic = uint(0x41465332)
+	headerMagic = uint(0x41465332)
 )
 
 type File struct {
@@ -20,12 +22,18 @@ type File struct {
 	Subfiles        map[uint]*hca.File
 }
 
-func LoadAWB(sf *br.BitReader, keycode uint64) *File {
-	if br.ReadA(sf, 32) != AwbHeaderMagic {
+func LoadAWB(data []byte, keycode uint64) *File {
+	sf := br.InitBitReader(data)
+
+	if br.Peek(sf, 32) == headerMagic {
+		br.Skip(sf, 32)
+	} else {
 		log.Panicln("Invalid Header for AWB file")
 	}
 
-	file := File{}
+	file := File{
+		Subfiles: make(map[uint]*hca.File),
+	}
 
 	version := br.ReadA(sf, 8)
 	if version != 2 {
@@ -57,18 +65,28 @@ func LoadAWB(sf *br.BitReader, keycode uint64) *File {
 		case 0x02:
 			fileOffset = br.ReadA(sf, 16)
 		}
-		if fileOffset%file.OffsetAlignment != 0 {
+		if ix != file.TotalSubsongs && fileOffset%file.OffsetAlignment != 0 {
 			fileOffset += file.OffsetAlignment - (fileOffset % file.OffsetAlignment)
 		}
 		subfileOffsets = append(subfileOffsets, fileOffset)
 	}
 
-	for subfileIx, subfileNext := range subfileOffsets[1:] {
-		subfileOffset := subfileOffsets[subfileIx-1]
-		subfileSize := subfileNext - subfileOffset
+	for i, subfileNext := range subfileOffsets[1:] {
+		if subfileNext > uint(len(data)) {
+			log.Panicln("Invalid Subfile offset", subfileNext)
+		}
 
-		hcaFile := hca.LoadHCA(sf, waveIds[subfileIx-1], subfileOffset, subfileSize, keycode)
-		waveId := waveIds[subfileIx]
+		subfileOffset := subfileOffsets[i]
+
+		subfileData := data[subfileOffset:subfileNext]
+
+		waveId := waveIds[i]
+		err := os.WriteFile(fmt.Sprintf("wave_%d.hca", waveId), subfileData, os.ModePerm)
+		if err != nil {
+			log.Panicln("Failed to write subfile for debugging", err)
+			continue
+		}
+		hcaFile := hca.LoadHCA(subfileData, keycode)
 		file.Subfiles[waveId] = hcaFile
 	}
 
