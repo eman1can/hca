@@ -47,7 +47,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	awbFile := awb.LoadAWB(awbData, keycode)
+	awbFile, err := awb.LoadAWB(awbData, keycode)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error loading AWB:", err)
+		os.Exit(1)
+	}
+
 	for waveID, hcaFile := range awbFile.Subfiles {
 		name, ok := acbFile.Names[uint16(waveID)]
 		if !ok || name == "" {

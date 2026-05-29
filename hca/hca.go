@@ -1,6 +1,7 @@
 package hca
 
 import (
+	"errors"
 	"log"
 	"math"
 
@@ -169,12 +170,12 @@ func headerCeil2(a uint, b uint) uint {
 	return a/b + (a % b)
 }
 
-func LoadHCA(data []byte, keycode uint64) *File {
+func LoadHCA(data []byte, keycode uint64) (*File, error) {
 	size := uint(len(data))
 	sf := br.InitBitReader(data)
 
 	if peekMagic(sf) != headerMagic {
-		log.Panic("Invalid HCA header")
+		return nil, errors.New("invalid header magic")
 	}
 	br.Skip(sf, 32)
 
@@ -182,16 +183,16 @@ func LoadHCA(data []byte, keycode uint64) *File {
 
 	file.Version = br.ReadABE(sf, 16)
 	if file.Version != 0x0200 && file.Version != 0x0300 {
-		log.Panicln("Invalid HCA Version")
+		return nil, errors.New("invalid header version")
 	}
 
 	file.HeaderSize = br.ReadABE(sf, 16)
 	if size < file.HeaderSize {
-		log.Panicln("Subfile size smaller than header size")
+		return nil, errors.New("invalid header size")
 	}
 
 	if checksum(data[:file.HeaderSize]) {
-		log.Panicln("Invalid HCA header CRC")
+		return nil, errors.New("invalid header checksum")
 	}
 
 	size -= 0x08
@@ -206,20 +207,20 @@ func LoadHCA(data []byte, keycode uint64) *File {
 		file.EncoderPadding = br.ReadABE(sf, 16)
 
 		if file.ChannelCount < minChannels || file.ChannelCount > maxChannels {
-			log.Panicln("Invalid channels")
+			return nil, errors.New("invalid channel count")
 		}
 
 		if file.FrameCount == 0 {
-			log.Panicln("Invalid frame count")
+			return nil, errors.New("invalid frame count")
 		}
 
 		if file.SampleRate < minSampleRate || file.SampleRate > maxSampleRate {
-			log.Panicln("Invalid sample rate")
+			return nil, errors.New("invalid sample rate")
 		}
 
 		size -= 0x10
 	} else {
-		log.Panicln("Invalid FMT header")
+		return nil, errors.New("invalid FMT header")
 	}
 
 	if size >= 0x10 && peekMagic(sf) == compHeaderMagic {
@@ -260,7 +261,7 @@ func LoadHCA(data []byte, keycode uint64) *File {
 
 		size -= 0x0C
 	} else {
-		log.Panicln("Invalid COMP header")
+		return nil, errors.New("invalid COMP header")
 	}
 
 	if size >= 0x08 && peekMagic(sf) == vbrHeaderMagic {
@@ -270,7 +271,7 @@ func LoadHCA(data []byte, keycode uint64) *File {
 		file.VbrNoiseLevel = br.ReadABE(sf, 16)
 
 		if file.FrameSize > 0 || file.VbrMaxFrameSize <= 8 || file.VbrMaxFrameSize > 0x1FF {
-			log.Panicln("Invalid VBR max frame size")
+			return nil, errors.New("invalid vbr max frame size")
 		}
 
 		size -= 0x08
@@ -301,7 +302,7 @@ func LoadHCA(data []byte, keycode uint64) *File {
 		file.LoopEnabled = 1
 
 		if file.LoopStartFrame < 0 || file.LoopStartFrame > file.LoopEndFrame && file.LoopEndFrame >= file.FrameCount {
-			log.Panicln("Invalid loop frame range")
+			return nil, errors.New("invalid loop start frame")
 		}
 
 		size -= 0x10
@@ -320,7 +321,7 @@ func LoadHCA(data []byte, keycode uint64) *File {
 		file.CiphType = br.ReadABE(sf, 16)
 
 		if file.CiphType != 0 && file.CiphType != 1 && file.CiphType != 56 {
-			log.Panicln("Invalid ciph type")
+			return nil, errors.New("invalid ciph type")
 		}
 
 		size -= 0x06
@@ -346,7 +347,7 @@ func LoadHCA(data []byte, keycode uint64) *File {
 		file.CommentLen = br.ReadABE(sf, 8)
 
 		if file.CommentLen > size-8 {
-			log.Panicln("Invalid comment length")
+			return nil, errors.New("invalid comment length")
 		}
 
 		var str []byte
@@ -367,26 +368,26 @@ func LoadHCA(data []byte, keycode uint64) *File {
 	}
 
 	if file.FrameSize < minFrameSize || file.FrameSize > maxFrameSize {
-		log.Panicln("Invalid frame size")
+		return nil, errors.New("invalid frame size")
 	}
 
 	if file.Version < 2 {
 		if file.MinResolution != 1 || file.MaxResolution != 15 {
-			log.Panicln("Invalid resolutions")
+			return nil, errors.New("invalid min or max resolution")
 		}
 	} else {
 		if file.MinResolution > file.MaxResolution || file.MaxResolution > 15 {
-			log.Panicln("Invalid resolutions")
+			return nil, errors.New("invalid min or max resolution")
 		}
 	}
 
 	file.TrackCount = max(file.TrackCount, 1)
 	if file.TrackCount > file.ChannelCount {
-		log.Panicln("Invalid track count")
+		return nil, errors.New("invalid track count")
 	}
 
 	if file.TotalBandCount > SamplesPerSubframe || file.BaseBandCount > SamplesPerSubframe || file.StereoBandCount > SamplesPerSubframe || file.BaseBandCount+file.StereoBandCount > SamplesPerSubframe || file.BandsPerHfrGroup > SamplesPerSubframe {
-		log.Panicln("Invalid frame counts")
+		return nil, errors.New("invalid frame count")
 	}
 
 	file.HfrGroupCount = headerCeil2(file.TotalBandCount-file.BaseBandCount-file.StereoBandCount, file.BandsPerHfrGroup)
@@ -414,7 +415,7 @@ frameLoop:
 	for frame := uint(0); frame < file.FrameCount; frame++ {
 		frameOffset := file.HeaderSize + frame*file.FrameSize
 		if uint(len(data)) < frameOffset+file.FrameSize {
-			log.Panicln("HCA data truncated at frame", frame)
+			return nil, errors.New("invalid frame size")
 		}
 		copy(frameBuffer, sf.Data[frameOffset:frameOffset+file.FrameSize])
 
@@ -440,5 +441,5 @@ frameLoop:
 		}
 	}
 
-	return &file
+	return &file, nil
 }

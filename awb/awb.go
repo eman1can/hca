@@ -1,7 +1,7 @@
 package awb
 
 import (
-	"log"
+	"errors"
 
 	"github.com/eman1can/sound_decrypt/br"
 	"github.com/eman1can/sound_decrypt/hca"
@@ -20,13 +20,13 @@ type File struct {
 	Subfiles        map[uint]*hca.File
 }
 
-func LoadAWB(data []byte, keycode uint64) *File {
+func LoadAWB(data []byte, keycode uint64) (*File, error) {
 	sf := br.InitBitReader(data)
 
 	if br.Peek(sf, 32) == headerMagic {
 		br.Skip(sf, 32)
 	} else {
-		log.Panicln("Invalid Header for AWB file")
+		return nil, errors.New("invalid header")
 	}
 
 	file := File{
@@ -35,7 +35,7 @@ func LoadAWB(data []byte, keycode uint64) *File {
 
 	version := br.ReadA(sf, 8)
 	if version != 2 {
-		log.Panicln("Invalid Version for AWB file", version)
+		return nil, errors.New("invalid version")
 	}
 
 	file.OffsetSize = br.ReadA(sf, 8)
@@ -71,7 +71,7 @@ func LoadAWB(data []byte, keycode uint64) *File {
 
 	for i, subfileNext := range subfileOffsets[1:] {
 		if subfileNext > uint(len(data)) {
-			log.Panicln("Invalid Subfile offset", subfileNext)
+			return nil, errors.New("invalid subfile")
 		}
 
 		subfileOffset := subfileOffsets[i]
@@ -79,9 +79,12 @@ func LoadAWB(data []byte, keycode uint64) *File {
 		subfileData := data[subfileOffset:subfileNext]
 
 		waveId := waveIds[i]
-		hcaFile := hca.LoadHCA(subfileData, keycode)
+		hcaFile, err := hca.LoadHCA(subfileData, keycode)
+		if err != nil {
+			return nil, err
+		}
 		file.Subfiles[waveId] = hcaFile
 	}
 
-	return &file
+	return &file, nil
 }
