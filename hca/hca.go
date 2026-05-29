@@ -9,19 +9,19 @@ import (
 )
 
 var (
-	HeaderMagic = uint(0x48434100)
-	HeaderMask  = uint(0x7F7F7F7F)
+	headerMagic = uint(0x48434100)
+	headerMask  = uint(0x7F7F7F7F)
 
-	FmtHeaderMagic  = uint(0x666D7400)
-	CompHeaderMagic = uint(0x636F6D70)
-	DecHeaderMagic  = uint(0x64656300)
-	VbrHeaderMagic  = uint(0x76627200)
-	AthHeaderMagic  = uint(0x61746800)
-	LoopHeaderMagic = uint(0x6C6F6F70)
-	CiphHeaderMagic = uint(0x63697068)
-	RvaHeaderMagic  = uint(0x72766100)
-	CommHeaderMagic = uint(0x636F6D6D)
-	PadHeaderMagic  = uint(0x70616400)
+	fmtHeaderMagic  = uint(0x666D7400)
+	compHeaderMagic = uint(0x636F6D70)
+	decHeaderMagic  = uint(0x64656300)
+	vbrHeaderMagic  = uint(0x76627200)
+	athHeaderMagic  = uint(0x61746800)
+	loopHeaderMagic = uint(0x6C6F6F70)
+	ciphHeaderMagic = uint(0x63697068)
+	rvaHeaderMagic  = uint(0x72766100)
+	commHeaderMagic = uint(0x636F6D6D)
+	padHeaderMagic  = uint(0x70616400)
 
 	crcMaskTable = []uint{
 		0x0000, 0x8005, 0x800F, 0x000A, 0x801B, 0x001E, 0x0014, 0x8011, 0x8033, 0x0036, 0x003C, 0x8039, 0x0028, 0x802D, 0x8027, 0x0022,
@@ -41,19 +41,20 @@ var (
 		0x8243, 0x0246, 0x024C, 0x8249, 0x0258, 0x825D, 0x8257, 0x0252, 0x0270, 0x8275, 0x827F, 0x027A, 0x826B, 0x026E, 0x0264, 0x8261,
 		0x0220, 0x8225, 0x822F, 0x022A, 0x823B, 0x023E, 0x0234, 0x8231, 0x8213, 0x0216, 0x021C, 0x8219, 0x0208, 0x820D, 0x8207, 0x0202,
 	}
-	MinChannels   = uint(1)
-	MaxChannels   = uint(16)
-	MinSampleRate = uint(1)
-	MaxSampleRate = uint(0x7FFFFF)
-	MinFrameSize  = uint(0x8)
-	MaxFrameSize  = uint(0xFFFF)
 
-	DefaultRandom = uint(1)
+	minChannels   = uint(1)
+	maxChannels   = uint(16)
+	minSampleRate = uint(1)
+	maxSampleRate = uint(0x7FFFFF)
+	minFrameSize  = uint(0x8)
+	maxFrameSize  = uint(0xFFFF)
 
-	SubFrames          = uint(8)
-	SamplesPerSubframe = uint(128)
-	SamplesPerFrame    = SubFrames * SamplesPerSubframe
-	MdctBits           = uint(7)
+	defaultRandom = uint(1)
+
+	subFrames          = uint(8)
+	samplesPerSubframe = uint(128)
+	samplesPerFrame    = subFrames * samplesPerSubframe
+	mdctBits           = uint(7)
 )
 
 type StChannel struct {
@@ -153,7 +154,7 @@ func peekMagic(sf *br.BitReader) uint {
 	v4 := int32(sf.Data[p+3])
 	v := (v1 << 24) | (v2 << 16) | (v3 << 8) | v4
 
-	return uint(v) & HeaderMask
+	return uint(v) & headerMask
 }
 
 func headerCeil2(a uint, b uint) uint {
@@ -169,7 +170,7 @@ func headerCeil2(a uint, b uint) uint {
 func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint64) *File {
 	br.Seek(sf, offset)
 
-	if peekMagic(sf) != HeaderMagic {
+	if peekMagic(sf) != headerMagic {
 		log.Panic("Invalid HCA header")
 	}
 	br.Skip(sf, 32)
@@ -192,7 +193,7 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 
 	size -= 0x08
 
-	if size >= 0x10 && peekMagic(sf) == FmtHeaderMagic {
+	if size >= 0x10 && peekMagic(sf) == fmtHeaderMagic {
 		br.Skip(sf, 32)
 
 		file.ChannelCount = br.ReadA(sf, 8)
@@ -201,7 +202,7 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 		file.EncoderDelay = br.ReadA(sf, 16)
 		file.EncoderPadding = br.ReadA(sf, 16)
 
-		if file.ChannelCount < MinChannels || file.ChannelCount > MaxChannels {
+		if file.ChannelCount < minChannels || file.ChannelCount > maxChannels {
 			log.Panicln("Invalid channels")
 		}
 
@@ -209,7 +210,7 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 			log.Panicln("Invalid frame count")
 		}
 
-		if file.SampleRate < MinSampleRate || file.SampleRate > MaxSampleRate {
+		if file.SampleRate < minSampleRate || file.SampleRate > maxSampleRate {
 			log.Panicln("Invalid sample rate")
 		}
 
@@ -218,7 +219,7 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 		log.Panicln("Invalid FMT header")
 	}
 
-	if size >= 0x10 && peekMagic(sf) == CompHeaderMagic {
+	if size >= 0x10 && peekMagic(sf) == compHeaderMagic {
 		br.Skip(sf, 32)
 
 		file.FrameSize = br.ReadA(sf, 16)
@@ -235,7 +236,7 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 		br.Skip(sf, 8)
 
 		size -= 0x10
-	} else if size >= 0x0C && peekMagic(sf) == DecHeaderMagic {
+	} else if size >= 0x0C && peekMagic(sf) == decHeaderMagic {
 		br.Skip(sf, 32)
 
 		file.FrameSize = br.ReadA(sf, 16)
@@ -259,7 +260,7 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 		log.Panicln("Invalid COMP header")
 	}
 
-	if size >= 0x08 && peekMagic(sf) == VbrHeaderMagic {
+	if size >= 0x08 && peekMagic(sf) == vbrHeaderMagic {
 		br.Skip(sf, 32)
 
 		file.VbrMaxFrameSize = br.ReadA(sf, 16)
@@ -275,7 +276,7 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 		file.VbrNoiseLevel = 0
 	}
 
-	if size >= 0x06 && peekMagic(sf) == AthHeaderMagic {
+	if size >= 0x06 && peekMagic(sf) == athHeaderMagic {
 		br.Skip(sf, 32)
 		file.AthType = br.ReadA(sf, 16)
 
@@ -286,7 +287,7 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 		file.AthType = 0
 	}
 
-	if size >= 0x10 && peekMagic(sf) == LoopHeaderMagic {
+	if size >= 0x10 && peekMagic(sf) == loopHeaderMagic {
 		br.Skip(sf, 32)
 
 		file.LoopStartFrame = br.ReadA(sf, 32)
@@ -310,7 +311,7 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 		file.LoopEnabled = 0
 	}
 
-	if size >= 0x06 && peekMagic(sf) == CiphHeaderMagic {
+	if size >= 0x06 && peekMagic(sf) == ciphHeaderMagic {
 		br.Skip(sf, 32)
 
 		file.CiphType = br.ReadA(sf, 16)
@@ -326,7 +327,7 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 
 	file.EncryptionEnabled = file.CiphType == 56
 
-	if size >= 0x08 && peekMagic(sf) == RvaHeaderMagic {
+	if size >= 0x08 && peekMagic(sf) == rvaHeaderMagic {
 		br.Skip(sf, 32)
 
 		file.RvaVolume = math.Float32frombits(uint32(br.ReadA(sf, 32)))
@@ -336,7 +337,7 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 		file.RvaVolume = 1.0
 	}
 
-	if size >= 0x05 && peekMagic(sf) == CommHeaderMagic {
+	if size >= 0x05 && peekMagic(sf) == commHeaderMagic {
 		br.Skip(sf, 32)
 
 		file.CommentLen = br.ReadA(sf, 8)
@@ -358,11 +359,11 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 		file.Comment = ""
 	}
 
-	if size >= 0x04 && peekMagic(sf) == PadHeaderMagic {
+	if size >= 0x04 && peekMagic(sf) == padHeaderMagic {
 		size -= size - 0x02
 	}
 
-	if file.FrameSize < MinFrameSize || file.FrameSize > MaxFrameSize {
+	if file.FrameSize < minFrameSize || file.FrameSize > maxFrameSize {
 		log.Panicln("Invalid frame size")
 	}
 
@@ -381,7 +382,7 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 		log.Panicln("Invalid track count")
 	}
 
-	if file.TotalBandCount > SamplesPerSubframe || file.BaseBandCount > SamplesPerSubframe || file.StereoBandCount > SamplesPerSubframe || file.BaseBandCount+file.StereoBandCount > SamplesPerSubframe || file.BandsPerHfrGroup > SamplesPerSubframe {
+	if file.TotalBandCount > samplesPerSubframe || file.BaseBandCount > samplesPerSubframe || file.StereoBandCount > samplesPerSubframe || file.BaseBandCount+file.StereoBandCount > samplesPerSubframe || file.BandsPerHfrGroup > samplesPerSubframe {
 		log.Panicln("Invalid frame counts")
 	}
 
@@ -391,18 +392,18 @@ func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint
 	file.CipherTable = CipherInit(int(file.CiphType), keycode)
 	file.Channel = ChannelInit(file.ChannelCount, file.ChannelConfig, file.TrackCount, file.BaseBandCount, file.StereoBandCount)
 
-	file.Random = DefaultRandom
+	file.Random = defaultRandom
 
 	if file.MsStereo == 1 {
 		log.Panicln("We don't know how to handle stereo")
 	}
 
-	file.SampleCount = file.FrameCount*SamplesPerFrame - file.EncoderDelay - file.EncoderPadding
-	file.LoopStartSample = file.LoopStartFrame*SamplesPerFrame - file.EncoderDelay + file.LoopStartDelay
-	file.LoopEndSample = file.LoopEndFrame*SamplesPerFrame - file.EncoderDelay + (SamplesPerFrame - file.LoopEndPadding)
+	file.SampleCount = file.FrameCount*samplesPerFrame - file.EncoderDelay - file.EncoderPadding
+	file.LoopStartSample = file.LoopStartFrame*samplesPerFrame - file.EncoderDelay + file.LoopStartDelay
+	file.LoopEndSample = file.LoopEndFrame*samplesPerFrame - file.EncoderDelay + (samplesPerFrame - file.LoopEndPadding)
 
 	file.Buffer = make([]byte, file.FrameSize)
-	file.FileBuffer = make([]byte, 4*file.ChannelCount*SamplesPerFrame)
+	file.FileBuffer = make([]byte, 4*file.ChannelCount*samplesPerFrame)
 
 	return &file
 }

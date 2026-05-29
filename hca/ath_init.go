@@ -47,7 +47,7 @@ var (
 )
 
 func AthInit(athType int, sampleRate uint) []byte {
-	data := make([]byte, SamplesPerSubframe)
+	data := make([]byte, samplesPerSubframe)
 
 	if athType == 0 {
 		return data
@@ -55,12 +55,12 @@ func AthInit(athType int, sampleRate uint) []byte {
 
 	acc := uint(0)
 	index := uint(0)
-	for ix := uint(0); ix < SamplesPerSubframe; ix++ {
+	for ix := uint(0); ix < samplesPerSubframe; ix++ {
 		acc += sampleRate
 		index = acc >> 13
 
 		if index >= 654 {
-			for iz := ix; iz < SamplesPerSubframe-ix; iz++ {
+			for iz := ix; iz < samplesPerSubframe-ix; iz++ {
 				data[iz] = 0xFF
 			}
 			break
