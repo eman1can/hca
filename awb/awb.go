@@ -1,9 +1,7 @@
 package awb
 
 import (
-	"fmt"
 	"log"
-	"os"
 
 	"eman1can/br"
 	"eman1can/hca"
@@ -81,11 +79,6 @@ func LoadAWB(data []byte, keycode uint64) *File {
 		subfileData := data[subfileOffset:subfileNext]
 
 		waveId := waveIds[i]
-		err := os.WriteFile(fmt.Sprintf("wave_%d.hca", waveId), subfileData, os.ModePerm)
-		if err != nil {
-			log.Panicln("Failed to write subfile for debugging", err)
-			continue
-		}
 		hcaFile := hca.LoadHCA(subfileData, keycode)
 		file.Subfiles[waveId] = hcaFile
 	}

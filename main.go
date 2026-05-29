@@ -48,7 +48,6 @@ func main() {
 	}
 
 	awbFile := awb.LoadAWB(awbData, keycode)
-
 	for waveID, hcaFile := range awbFile.Subfiles {
 		name, ok := acbFile.Names[uint16(waveID)]
 		if !ok || name == "" {
