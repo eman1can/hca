@@ -3,8 +3,8 @@ package hca
 import (
 	"math"
 
-	"eman1can/br"
-	"eman1can/enum"
+	"github.com/eman1can/sound_decrypt/br"
+	"github.com/eman1can/sound_decrypt/enum"
 )
 
 // HCA version constants used for version-dependent decode paths.

@@ -3,8 +3,8 @@ package awb
 import (
 	"log"
 
-	"eman1can/br"
-	"eman1can/hca"
+	"github.com/eman1can/sound_decrypt/br"
+	"github.com/eman1can/sound_decrypt/hca"
 )
 
 var (

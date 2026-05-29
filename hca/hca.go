@@ -4,8 +4,8 @@ import (
 	"log"
 	"math"
 
-	"eman1can/br"
-	"eman1can/enum"
+	"github.com/eman1can/sound_decrypt/br"
+	"github.com/eman1can/sound_decrypt/enum"
 )
 
 var (

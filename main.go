@@ -5,9 +5,9 @@ import (
 	"os"
 	"strings"
 
-	"eman1can/acb"
-	"eman1can/awb"
-	"eman1can/wav"
+	"github.com/eman1can/sound_decrypt/acb"
+	"github.com/eman1can/sound_decrypt/awb"
+	"github.com/eman1can/sound_decrypt/wav"
 )
 
 func main() {

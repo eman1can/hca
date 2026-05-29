@@ -1,6 +1,6 @@
 package hca
 
-import "eman1can/enum"
+import "github.com/eman1can/sound_decrypt/enum"
 
 func ChannelInit(channels uint, channelConfig uint, trackCount uint, baseBandCount uint, stereoBandCount uint) []StChannel {
 	channel := make([]StChannel, channels)

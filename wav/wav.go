@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"io"
 
-	"eman1can/hca"
+	"github.com/eman1can/sound_decrypt/hca"
 )
 
 // WriteWAV writes the decoded samples from file as a standard 16-bit little-endian
