@@ -1,9 +1,11 @@
 package main
 
 import (
-	"eman1can/hca"
 	"fmt"
 	"os"
+
+	"eman1can/awb"
+	"eman1can/br"
 )
 
 func main() {
@@ -13,16 +15,22 @@ func main() {
 		return
 	}
 
-	awbMetapackOffset := 13120
-	awbMetapackSize := 133153
-	acbMetapackOffset := 6560
-	acbMetapackSize := 6560
+	// AWB Keycode for Love Live! School Idol Festival 2 MIRACLE LIVE (Android)
+	// keycode := uint64(5067530812966687744)
 
-	acbData := make([]byte, acbMetapackSize)
-	awbData := make([]byte, awbMetapackSize)
-	copy(acbData[acbMetapackOffset:], data)
-	copy(awbData[awbMetapackOffset:], data)
+	// AWB Keycode for Love Live! School idol festival ALL STARS (Android)
+	keycode := uint64(5067530812966687744)
 
-	awb := hca.loadAWB(awbData)
+	awbOffset := 13120
+	awbSize := 133153
+	acbOffset := 6560
+	acbSize := 6560
 
+	acbData := make([]byte, acbSize)
+	awbData := make([]byte, awbSize)
+	copy(acbData[acbOffset:], data)
+	copy(awbData[awbOffset:], data)
+
+	sf := br.InitBitReader(awbData)
+	awb := awb.LoadAWB(sf, keycode)
 }

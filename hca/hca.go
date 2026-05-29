@@ -1,1 +1,408 @@
 package hca
+
+import (
+	"log"
+	"math"
+
+	"eman1can/br"
+	"eman1can/enum"
+)
+
+var (
+	HeaderMagic = uint(0x48434100)
+	HeaderMask  = uint(0x7F7F7F7F)
+
+	FmtHeaderMagic  = uint(0x666D7400)
+	CompHeaderMagic = uint(0x636F6D70)
+	DecHeaderMagic  = uint(0x64656300)
+	VbrHeaderMagic  = uint(0x76627200)
+	AthHeaderMagic  = uint(0x61746800)
+	LoopHeaderMagic = uint(0x6C6F6F70)
+	CiphHeaderMagic = uint(0x63697068)
+	RvaHeaderMagic  = uint(0x72766100)
+	CommHeaderMagic = uint(0x636F6D6D)
+	PadHeaderMagic  = uint(0x70616400)
+
+	crcMaskTable = []uint{
+		0x0000, 0x8005, 0x800F, 0x000A, 0x801B, 0x001E, 0x0014, 0x8011, 0x8033, 0x0036, 0x003C, 0x8039, 0x0028, 0x802D, 0x8027, 0x0022,
+		0x8063, 0x0066, 0x006C, 0x8069, 0x0078, 0x807D, 0x8077, 0x0072, 0x0050, 0x8055, 0x805F, 0x005A, 0x804B, 0x004E, 0x0044, 0x8041,
+		0x80C3, 0x00C6, 0x00CC, 0x80C9, 0x00D8, 0x80DD, 0x80D7, 0x00D2, 0x00F0, 0x80F5, 0x80FF, 0x00FA, 0x80EB, 0x00EE, 0x00E4, 0x80E1,
+		0x00A0, 0x80A5, 0x80AF, 0x00AA, 0x80BB, 0x00BE, 0x00B4, 0x80B1, 0x8093, 0x0096, 0x009C, 0x8099, 0x0088, 0x808D, 0x8087, 0x0082,
+		0x8183, 0x0186, 0x018C, 0x8189, 0x0198, 0x819D, 0x8197, 0x0192, 0x01B0, 0x81B5, 0x81BF, 0x01BA, 0x81AB, 0x01AE, 0x01A4, 0x81A1,
+		0x01E0, 0x81E5, 0x81EF, 0x01EA, 0x81FB, 0x01FE, 0x01F4, 0x81F1, 0x81D3, 0x01D6, 0x01DC, 0x81D9, 0x01C8, 0x81CD, 0x81C7, 0x01C2,
+		0x0140, 0x8145, 0x814F, 0x014A, 0x815B, 0x015E, 0x0154, 0x8151, 0x8173, 0x0176, 0x017C, 0x8179, 0x0168, 0x816D, 0x8167, 0x0162,
+		0x8123, 0x0126, 0x012C, 0x8129, 0x0138, 0x813D, 0x8137, 0x0132, 0x0110, 0x8115, 0x811F, 0x011A, 0x810B, 0x010E, 0x0104, 0x8101,
+		0x8303, 0x0306, 0x030C, 0x8309, 0x0318, 0x831D, 0x8317, 0x0312, 0x0330, 0x8335, 0x833F, 0x033A, 0x832B, 0x032E, 0x0324, 0x8321,
+		0x0360, 0x8365, 0x836F, 0x036A, 0x837B, 0x037E, 0x0374, 0x8371, 0x8353, 0x0356, 0x035C, 0x8359, 0x0348, 0x834D, 0x8347, 0x0342,
+		0x03C0, 0x83C5, 0x83CF, 0x03CA, 0x83DB, 0x03DE, 0x03D4, 0x83D1, 0x83F3, 0x03F6, 0x03FC, 0x83F9, 0x03E8, 0x83ED, 0x83E7, 0x03E2,
+		0x83A3, 0x03A6, 0x03AC, 0x83A9, 0x03B8, 0x83BD, 0x83B7, 0x03B2, 0x0390, 0x8395, 0x839F, 0x039A, 0x838B, 0x038E, 0x0384, 0x8381,
+		0x0280, 0x8285, 0x828F, 0x028A, 0x829B, 0x029E, 0x0294, 0x8291, 0x82B3, 0x02B6, 0x02BC, 0x82B9, 0x02A8, 0x82AD, 0x82A7, 0x02A2,
+		0x82E3, 0x02E6, 0x02EC, 0x82E9, 0x02F8, 0x82FD, 0x82F7, 0x02F2, 0x02D0, 0x82D5, 0x82DF, 0x02DA, 0x82CB, 0x02CE, 0x02C4, 0x82C1,
+		0x8243, 0x0246, 0x024C, 0x8249, 0x0258, 0x825D, 0x8257, 0x0252, 0x0270, 0x8275, 0x827F, 0x027A, 0x826B, 0x026E, 0x0264, 0x8261,
+		0x0220, 0x8225, 0x822F, 0x022A, 0x823B, 0x023E, 0x0234, 0x8231, 0x8213, 0x0216, 0x021C, 0x8219, 0x0208, 0x820D, 0x8207, 0x0202,
+	}
+	MinChannels   = uint(1)
+	MaxChannels   = uint(16)
+	MinSampleRate = uint(1)
+	MaxSampleRate = uint(0x7FFFFF)
+	MinFrameSize  = uint(0x8)
+	MaxFrameSize  = uint(0xFFFF)
+
+	DefaultRandom = uint(1)
+
+	SubFrames          = uint(8)
+	SamplesPerSubframe = uint(128)
+	SamplesPerFrame    = SubFrames * SamplesPerSubframe
+	MdctBits           = uint(7)
+)
+
+type StChannel struct {
+	Type       enum.ChannelType
+	CodedCount uint
+
+	Intensity    []byte
+	ScaleFactors []byte
+	Resolution   []byte
+	Noises       []byte
+	NoiseCount   []byte
+	ValidCount   []byte
+
+	Gain    []float32
+	Spectra [][]float32
+
+	Temp          []float32
+	Dct           []float32
+	ImdctPrevious []float32
+
+	Wave [][]float32
+}
+
+type File struct {
+	Version    uint
+	HeaderSize uint
+
+	ChannelCount   uint
+	SampleRate     uint
+	FrameCount     uint
+	EncoderDelay   uint
+	EncoderPadding uint
+
+	FrameSize        uint
+	MinResolution    uint
+	MaxResolution    uint
+	TrackCount       uint
+	ChannelConfig    uint
+	StereoType       uint
+	TotalBandCount   uint
+	BaseBandCount    uint
+	StereoBandCount  uint
+	BandsPerHfrGroup uint
+	MsStereo         uint
+
+	VbrMaxFrameSize uint
+	VbrNoiseLevel   uint
+
+	AthType uint
+
+	LoopStartFrame uint
+	LoopEndFrame   uint
+	LoopStartDelay uint
+	LoopEndPadding uint
+	LoopEnabled    uint
+
+	EncryptionEnabled bool
+	CiphType          uint
+
+	RvaVolume float32
+
+	CommentLen uint
+	Comment    string
+
+	HfrGroupCount uint
+	AthCurve      []byte
+	CipherTable   []byte
+
+	Random  uint
+	Channel []StChannel
+
+	SampleCount     uint
+	LoopStartSample uint
+	LoopEndSample   uint
+
+	Buffer     []byte
+	FileBuffer []byte
+}
+
+func crc16Checksum(sf *br.BitReader, size uint) bool {
+	crc := uint(0)
+	for ix := uint(0); ix < size; ix++ {
+		crc = (crc << 8) ^ crcMaskTable[(crc>>8)^uint(sf.Data[ix])]
+	}
+	return crc != 0
+}
+
+func peekMagic(sf *br.BitReader) uint {
+	if !sf.Aligned {
+		log.Panicln("Attempted to read magic from unaligned bit reader")
+	}
+
+	p := sf.Bit / 8
+	v1 := int32(sf.Data[p])
+	v2 := int32(sf.Data[p+1])
+	v3 := int32(sf.Data[p+2])
+	v4 := int32(sf.Data[p+3])
+	v := (v1 << 24) | (v2 << 16) | (v3 << 8) | v4
+
+	return uint(v) & HeaderMask
+}
+
+func headerCeil2(a uint, b uint) uint {
+	if b < 1 {
+		return 0
+	}
+	if a%b == 0 {
+		return a / b
+	}
+	return a/b + (a % b)
+}
+
+func LoadHCA(sf *br.BitReader, waveId uint, offset uint, size uint, keycode uint64) *File {
+	br.Seek(sf, offset)
+
+	if peekMagic(sf) != HeaderMagic {
+		log.Panic("Invalid HCA header")
+	}
+	br.Skip(sf, 32)
+
+	file := File{}
+
+	file.Version = br.ReadA(sf, 16)
+	if file.Version != 2 {
+		log.Panicln("Invalid HCA Version")
+	}
+
+	file.HeaderSize = br.ReadA(sf, 16)
+	if size < file.HeaderSize {
+		log.Panicln("Subfile size smaller than header size")
+	}
+
+	if crc16Checksum(sf, file.HeaderSize) {
+		log.Panicln("Invalid HCA header CRC")
+	}
+
+	size -= 0x08
+
+	if size >= 0x10 && peekMagic(sf) == FmtHeaderMagic {
+		br.Skip(sf, 32)
+
+		file.ChannelCount = br.ReadA(sf, 8)
+		file.SampleRate = br.ReadA(sf, 24)
+		file.FrameCount = br.ReadA(sf, 32)
+		file.EncoderDelay = br.ReadA(sf, 16)
+		file.EncoderPadding = br.ReadA(sf, 16)
+
+		if file.ChannelCount < MinChannels || file.ChannelCount > MaxChannels {
+			log.Panicln("Invalid channels")
+		}
+
+		if file.FrameCount == 0 {
+			log.Panicln("Invalid frame count")
+		}
+
+		if file.SampleRate < MinSampleRate || file.SampleRate > MaxSampleRate {
+			log.Panicln("Invalid sample rate")
+		}
+
+		size -= 0x10
+	} else {
+		log.Panicln("Invalid FMT header")
+	}
+
+	if size >= 0x10 && peekMagic(sf) == CompHeaderMagic {
+		br.Skip(sf, 32)
+
+		file.FrameSize = br.ReadA(sf, 16)
+		file.MinResolution = br.ReadA(sf, 8)
+		file.MaxResolution = br.ReadA(sf, 8)
+		file.TrackCount = br.ReadA(sf, 8)
+		file.ChannelConfig = br.ReadA(sf, 8)
+		file.TotalBandCount = br.ReadA(sf, 8)
+		file.BaseBandCount = br.ReadA(sf, 8)
+		file.StereoBandCount = br.ReadA(sf, 8)
+		file.BandsPerHfrGroup = br.ReadA(sf, 8)
+		file.MsStereo = br.ReadA(sf, 8)
+
+		br.Skip(sf, 8)
+
+		size -= 0x10
+	} else if size >= 0x0C && peekMagic(sf) == DecHeaderMagic {
+		br.Skip(sf, 32)
+
+		file.FrameSize = br.ReadA(sf, 16)
+		file.MinResolution = br.ReadA(sf, 8)
+		file.MaxResolution = br.ReadA(sf, 8)
+		file.TotalBandCount = br.ReadA(sf, 8) + 1
+		file.BaseBandCount = br.ReadA(sf, 8) + 1
+		file.TrackCount = br.Read(sf, 4)
+		file.ChannelConfig = br.Read(sf, 4)
+		file.StereoType = br.ReadA(sf, 8)
+
+		if file.StereoType == enum.Discrete {
+			file.BaseBandCount = file.TotalBandCount
+		}
+
+		file.StereoBandCount = file.TotalBandCount - file.BaseBandCount
+		file.BandsPerHfrGroup = 0
+
+		size -= 0x0C
+	} else {
+		log.Panicln("Invalid COMP header")
+	}
+
+	if size >= 0x08 && peekMagic(sf) == VbrHeaderMagic {
+		br.Skip(sf, 32)
+
+		file.VbrMaxFrameSize = br.ReadA(sf, 16)
+		file.VbrNoiseLevel = br.ReadA(sf, 16)
+
+		if file.FrameSize > 0 || file.VbrMaxFrameSize <= 8 || file.VbrMaxFrameSize > 0x1FF {
+			log.Panicln("Invalid VBR max frame size")
+		}
+
+		size -= 0x08
+	} else {
+		file.VbrMaxFrameSize = 0
+		file.VbrNoiseLevel = 0
+	}
+
+	if size >= 0x06 && peekMagic(sf) == AthHeaderMagic {
+		br.Skip(sf, 32)
+		file.AthType = br.ReadA(sf, 16)
+
+		size -= 0x06
+	} else if file.Version < 2 {
+		file.AthType = 1
+	} else {
+		file.AthType = 0
+	}
+
+	if size >= 0x10 && peekMagic(sf) == LoopHeaderMagic {
+		br.Skip(sf, 32)
+
+		file.LoopStartFrame = br.ReadA(sf, 32)
+		file.LoopEndFrame = br.ReadA(sf, 32)
+		file.LoopStartDelay = br.ReadA(sf, 16)
+		file.LoopEndPadding = br.ReadA(sf, 16)
+
+		file.LoopEnabled = 1
+
+		if file.LoopStartFrame < 0 || file.LoopStartFrame > file.LoopEndFrame && file.LoopEndFrame >= file.FrameCount {
+			log.Panicln("Invalid loop frame range")
+		}
+
+		size -= 0x10
+	} else {
+		file.LoopStartFrame = 0
+		file.LoopEndFrame = 0
+		file.LoopStartDelay = 0
+		file.LoopEndPadding = 0
+
+		file.LoopEnabled = 0
+	}
+
+	if size >= 0x06 && peekMagic(sf) == CiphHeaderMagic {
+		br.Skip(sf, 32)
+
+		file.CiphType = br.ReadA(sf, 16)
+
+		if file.CiphType != 0 && file.CiphType != 1 && file.CiphType != 56 {
+			log.Panicln("Invalid ciph type")
+		}
+
+		size -= 0x06
+	} else {
+		file.CiphType = 0
+	}
+
+	file.EncryptionEnabled = file.CiphType == 56
+
+	if size >= 0x08 && peekMagic(sf) == RvaHeaderMagic {
+		br.Skip(sf, 32)
+
+		file.RvaVolume = math.Float32frombits(uint32(br.ReadA(sf, 32)))
+
+		size -= 0x08
+	} else {
+		file.RvaVolume = 1.0
+	}
+
+	if size >= 0x05 && peekMagic(sf) == CommHeaderMagic {
+		br.Skip(sf, 32)
+
+		file.CommentLen = br.ReadA(sf, 8)
+
+		if file.CommentLen > size-8 {
+			log.Panicln("Invalid comment length")
+		}
+
+		var str []byte
+		for i := 0; i < int(file.CommentLen); i++ {
+			b := br.ReadA(sf, 8)
+			str = append(str, byte(b))
+		}
+		file.Comment = string(str)
+
+		size -= 0x05 + file.CommentLen
+	} else {
+		file.CommentLen = 0
+		file.Comment = ""
+	}
+
+	if size >= 0x04 && peekMagic(sf) == PadHeaderMagic {
+		size -= size - 0x02
+	}
+
+	if file.FrameSize < MinFrameSize || file.FrameSize > MaxFrameSize {
+		log.Panicln("Invalid frame size")
+	}
+
+	if file.Version < 2 {
+		if file.MinResolution != 1 || file.MaxResolution != 15 {
+			log.Panicln("Invalid resolutions")
+		}
+	} else {
+		if file.MinResolution > file.MaxResolution || file.MaxResolution > 15 {
+			log.Panicln("Invalid resolutions")
+		}
+	}
+
+	file.TrackCount = max(file.TrackCount, 1)
+	if file.TrackCount > file.ChannelCount {
+		log.Panicln("Invalid track count")
+	}
+
+	if file.TotalBandCount > SamplesPerSubframe || file.BaseBandCount > SamplesPerSubframe || file.StereoBandCount > SamplesPerSubframe || file.BaseBandCount+file.StereoBandCount > SamplesPerSubframe || file.BandsPerHfrGroup > SamplesPerSubframe {
+		log.Panicln("Invalid frame counts")
+	}
+
+	file.HfrGroupCount = headerCeil2(file.TotalBandCount-file.BaseBandCount-file.StereoBandCount, file.BandsPerHfrGroup)
+
+	file.AthCurve = AthInit(int(file.AthType), file.SampleRate)
+	file.CipherTable = CipherInit(int(file.CiphType), keycode)
+	file.Channel = ChannelInit(file.ChannelCount, file.ChannelConfig, file.TrackCount, file.BaseBandCount, file.StereoBandCount)
+
+	file.Random = DefaultRandom
+
+	if file.MsStereo == 1 {
+		log.Panicln("We don't know how to handle stereo")
+	}
+
+	file.SampleCount = file.FrameCount*SamplesPerFrame - file.EncoderDelay - file.EncoderPadding
+	file.LoopStartSample = file.LoopStartFrame*SamplesPerFrame - file.EncoderDelay + file.LoopStartDelay
+	file.LoopEndSample = file.LoopEndFrame*SamplesPerFrame - file.EncoderDelay + (SamplesPerFrame - file.LoopEndPadding)
+
+	file.Buffer = make([]byte, file.FrameSize)
+	file.FileBuffer = make([]byte, 4*file.ChannelCount*SamplesPerFrame)
+
+	return &file
+}
