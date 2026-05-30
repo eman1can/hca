@@ -681,7 +681,7 @@ func applyMsStereo(chPair []StChannel, msStereo uint, baseBandCount uint, totalB
 	spL := chPair[0].Spectra[subframe]
 	spR := chPair[1].Spectra[subframe]
 
-	for band := baseBandCount; band < totalBandCount; band++ {
+	for band := uint(0); band < baseBandCount; band++ {
 		coefL := (spL[band] + spR[band]) * ratio
 		coefR := (spL[band] - spR[band]) * ratio
 		spL[band] = coefL
@@ -799,7 +799,7 @@ func imdctTransform(ch *StChannel, subframe int) {
 
 	for i := 0; i < half; i++ {
 		wave[i] = imdctWindowTable[i]*dct[i+half] + prev[i]
-		wave[i+half] = imdctWindowTable[i+half]*dct[size-1-i] + prev[i+half]
+		wave[i+half] = imdctWindowTable[i+half]*dct[size-1-i] - prev[i+half]
 		prev[i] = imdctWindowTable[size-1-i] * dct[half-i-1]
 		prev[i+half] = imdctWindowTable[half-i-1] * dct[i]
 	}
