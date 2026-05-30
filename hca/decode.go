@@ -799,7 +799,7 @@ func imdctTransform(ch *StChannel, subframe int) {
 
 	for i := 0; i < half; i++ {
 		wave[i] = imdctWindowTable[i]*dct[i+half] + prev[i]
-		wave[i+half] = imdctWindowTable[i+half]*dct[size-1-i] - prev[i+half]
+		wave[i+half] = imdctWindowTable[i+half]*dct[size-1-i] + prev[i+half]
 		prev[i] = imdctWindowTable[size-1-i] * dct[half-i-1]
 		prev[i+half] = imdctWindowTable[half-i-1] * dct[i]
 	}
