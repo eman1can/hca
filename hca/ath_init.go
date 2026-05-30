@@ -60,7 +60,7 @@ func AthInit(athType int, sampleRate uint) []byte {
 		index = acc >> 13
 
 		if index >= 654 {
-			for iz := ix; iz < SamplesPerSubframe-ix; iz++ {
+			for iz := ix; iz < SamplesPerSubframe; iz++ {
 				data[iz] = 0xFF
 			}
 			break

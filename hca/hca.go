@@ -160,14 +160,17 @@ func peekMagic(sf *br.BitReader) uint {
 	return uint(v) & headerMask
 }
 
+// headerCeil2 is ceiling division: a/b rounded up.
+// Matches clHCA_ceil2 in the C reference: a/b + (a%b != 0 ? 1 : 0)
 func headerCeil2(a uint, b uint) uint {
 	if b < 1 {
 		return 0
 	}
-	if a%b == 0 {
-		return a / b
+	q := a / b
+	if a%b != 0 {
+		q++
 	}
-	return a/b + (a % b)
+	return q
 }
 
 func LoadHCA(data []byte, keycode uint64) (*File, error) {

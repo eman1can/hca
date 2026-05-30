@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/eman1can/sound_decrypt/acb"
@@ -11,32 +12,35 @@ import (
 )
 
 func main() {
-	data, err := os.ReadFile("rrilgl")
-	if err != nil {
-		fmt.Println("Error reading file:", err)
-		return
-	}
+	// data, err := os.ReadFile("rrilgl")
+	// if err != nil {
+	// 	fmt.Println("Error reading file:", err)
+	// 	return
+	// }
+	//
+	// awbOffset := 13120
+	// awbSize := 133153
+	// acbOffset := 6560
+	// acbSize := 6560
+	//
+	// acbData := make([]byte, acbSize)
+	// awbData := make([]byte, awbSize)
+	// copy(acbData, data[acbOffset:acbOffset+acbSize])
+	// copy(awbData, data[awbOffset:awbOffset+awbSize])
+	//
+	// err = os.WriteFile("rrilgl.acb", acbData, 0666)
+	// if err != nil {
+	// 	fmt.Println("Error writing file:", err)
+	// 	return
+	// }
+	// err = os.WriteFile("rrilgl.awb", awbData, 0666)
+	// if err != nil {
+	// 	fmt.Println("Error writing file:", err)
+	// 	return
+	// }
 
-	awbOffset := 13120
-	awbSize := 133153
-	acbOffset := 6560
-	acbSize := 6560
-
-	acbData := make([]byte, acbSize)
-	awbData := make([]byte, awbSize)
-	copy(acbData, data[acbOffset:acbOffset+acbSize])
-	copy(awbData, data[awbOffset:awbOffset+awbSize])
-
-	err = os.WriteFile("rrilgl.acb", acbData, 0666)
-	if err != nil {
-		fmt.Println("Error writing file:", err)
-		return
-	}
-	err = os.WriteFile("rrilgl.awb", awbData, 0666)
-	if err != nil {
-		fmt.Println("Error writing file:", err)
-		return
-	}
+	acbData, err := os.ReadFile(filepath.Join("E:\\CodeProjects\\SIFAS\\elichika\\static\\sounds", "acb", "vo_na_m0201_0133.acb"))
+	awbData, err := os.ReadFile(filepath.Join("E:\\CodeProjects\\SIFAS\\elichika\\static\\sounds", "awb", "vo_na_m0201_0133.awb"))
 
 	// AWB Keycode for Love Live! School idol festival ALL STARS (Android)
 	keycode := uint64(6498535309877346413)

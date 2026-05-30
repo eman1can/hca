@@ -21,6 +21,14 @@ func CipherInit(cipherType int, keycode uint64) []byte {
 
 	data := make([]byte, 256)
 
+	// Type 0 = no encryption: identity mapping
+	if cipherType == 0 {
+		for i := range data {
+			data[i] = byte(i)
+		}
+		return data
+	}
+
 	if cipherType == 1 {
 		mul := 13
 		add := 11

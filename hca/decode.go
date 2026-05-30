@@ -391,17 +391,17 @@ func unpackScaleFactors(ch *StChannel, sf *br.BitReader, hfrGroupCount uint, ver
 func unpackIntensity(ch *StChannel, sf *br.BitReader, hfrGroupCount uint, version uint) bool {
 	if ch.Type == enum.StereoSecondary {
 		if version <= hcaVersionV200 {
-			// C uses peek (non-consuming); simulate with Read + conditional Back.
-			value := byte(br.Read(sf, 4))
-			ch.Intensity[0] = value
+			// Peek first (non-consuming). Only consume and set if value < 15.
+			// value==15 is a special marker meaning "keep previous intensity".
+			value := byte(br.Peek(sf, 4))
 			if value < 15 {
+				br.Skip(sf, 4) // consume the peeked bits
+				ch.Intensity[0] = value
 				for i := uint(1); i < SubFrames; i++ {
 					ch.Intensity[i] = byte(br.Read(sf, 4))
 				}
-			} else {
-				// value==15: C did not consume the peek, undo the read
-				br.Back(sf, 4)
 			}
+			// value==15: bit position unchanged, intensity keeps previous frame's values
 		} else {
 			// v3.0
 			value := byte(br.Read(sf, 4)) // peek + skip
@@ -803,6 +803,7 @@ func imdctTransform(ch *StChannel, subframe int) {
 		prev[i] = imdctWindowTable[size-1-i] * dct[half-i-1]
 		prev[i+half] = imdctWindowTable[half-i-1] * dct[i]
 	}
+
 }
 
 // DecodeFrame decodes a single HCA frame. frameData must be exactly file.FrameSize bytes.
@@ -862,11 +863,11 @@ func DecodeFrame(file *File, frameData []byte) bool {
 				file.StereoBandCount, file.BaseBandCount, file.TotalBandCount, file.Version, subframe)
 		}
 
-		if file.StereoBandCount > 0 {
-			for ch := uint(0); ch+1 < file.ChannelCount; ch++ {
+		for ch := uint(0); ch+1 < file.ChannelCount; ch++ {
+			if file.StereoBandCount > 0 {
 				applyIntensityStereo(file.Channel[ch:ch+2], subframe, file.BaseBandCount, file.TotalBandCount)
-				applyMsStereo(file.Channel[ch:ch+2], file.MsStereo, file.BaseBandCount, file.TotalBandCount, subframe)
 			}
+			applyMsStereo(file.Channel[ch:ch+2], file.MsStereo, file.BaseBandCount, file.TotalBandCount, subframe)
 		}
 
 		for ch := uint(0); ch < file.ChannelCount; ch++ {
